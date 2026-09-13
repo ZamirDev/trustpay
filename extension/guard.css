@@ -37,6 +37,11 @@ body.popup {
 .v-mid .v-ball { background: #e0a32e; }
 .v-level { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.4px; }
 .v-page { font-size: 11px; color: rgba(61, 44, 46, 0.55); word-break: break-all; }
+.off-tag {
+  display: inline-block; margin-top: 4px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.3px; text-transform: uppercase; color: #8a5a00;
+  background: #f5c86b; border: 2px solid #3d2c2e; border-radius: 999px; padding: 1px 8px;
+}
 .v-factors { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
 .v-factors li {
   display: flex; justify-content: space-between; gap: 8px;

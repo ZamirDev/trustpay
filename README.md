@@ -110,9 +110,18 @@ your own card details. Dashboard at `#/dashboard` shows the live feed.
 
 ### 3. Extension (Chrome)
 
-1. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → `extension/`.
+1. **Zip install (recommended):** grab `trustpay-guard-v0.2.0.zip` from the release page,
+   unzip → `chrome://extensions` → Developer mode → **Load unpacked** → select the folder.
+   Full guide: `extension/INSTALL.md`.
 2. Checkout on any `http://localhost` page — the guard attaches automatically.
-3. Use the popup **"Is this payment page safe?"** to scan a page before paying.
+3. Use the popup **"Is this payment page safe?"** to scan a page before paying. Works on any
+   site (activeTab).
+
+**Offline-first.** The extension ships its own copy of the risk model (`extension/riskModel.js`,
+a mirror of `server/src/riskModel.js`), so guard + scan + MFA work with **no server running**.
+If the API is reachable it's used instead (and the merchant dashboard learns about the
+checkout); a small "offline engine" tag on the popup tells you which mode you're in. Verdicts
+are identical in both modes.
 
 ---
 

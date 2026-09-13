@@ -11,7 +11,7 @@ function reportCard(v) {
       <div class="v-ball">${v.score}</div>
       <div>
         <div class="v-level">${v.level}</div>
-        <div class="v-page">${v.page || ''}</div>
+        <div class="v-page">${v.page || ''}${v.source === 'offline' ? '<span class="off-tag">offline engine</span>' : ''}</div>
       </div>
     </div>
     ${v.factors && v.factors.length

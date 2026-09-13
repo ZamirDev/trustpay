@@ -1,19 +1,47 @@
-// background.js — TrustPay Guard bridge. All API calls go through here so a
-// service worker with host_permissions bypasses page CORS entirely.
+// background.js — TrustPay Guard bridge + embedded offline engine.
+// All API calls go through here so a service worker with host_permissions
+// bypasses page CORS entirely.
 //
 // API base: dev = localhost:4000. At submission, swap in the live Railway URL
 // (it stays paused until then to respect our free-tier budget):
 //   const API = 'https://devoted-caring-production-534f.up.railway.app';
+//
+// Every API-backed message first tries the server (900ms timeout). If it is
+// unreachable, the embedded riskModel.js scores/verifies in place so the
+// extension is fully self-contained (offline mode). Verdicts are identical in
+// both modes — the model is a mirror of server/src/riskModel.js.
+
+import { scoreRisk, explain } from './riskModel.js';
 
 const API = 'http://localhost:4000';
 const LAST_KEY = 'tpLastVerdict';
+const API_TIMEOUT_MS = 900;
+const OFFLINE_TTL_MS = 5 * 60 * 1000;
 
-async function http(path, body) {
-  const res = await fetch(API + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
+// offline MFA store: txnId -> { code, expiresAt }
+const mfaCodes = new Map();
+
+function offlineTxnId(seed) {
+  return seed && seed !== 'undefined' ? seed : 'offline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+async function apiFetch(path, body) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), API_TIMEOUT_MS);
+  try {
+    return await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+      signal: ctl.signal,
+    });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function api(path, body) {
+  const res = await apiFetch(path, body);
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -30,7 +58,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
       if (msg.type === 'risk') {
-        const verdict = await http('/api/risk', { signals: msg.signals });
+        let verdict, source;
+        try {
+          verdict = await api('/api/risk', { signals: msg.signals });
+          source = 'server';
+        } catch {
+          const txnId = offlineTxnId(msg.signals && msg.signals.meta && msg.signals.meta.uid);
+          const v = scoreRisk(msg.signals);
+          verdict = { txnId, ...v, explain: explain(v) };
+          source = 'offline';
+        }
         await setBadge(verdict.score);
         await chrome.storage.local.set({
           [LAST_KEY]: {
@@ -39,13 +76,42 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             factors: verdict.factors || [],
             page: _sender.tab ? _sender.tab.url : 'unknown',
             ts: Date.now(),
+            source,
           },
         });
-        sendResponse(verdict);
+        sendResponse({ ...verdict, source });
       } else if (msg.type === 'mfaSend') {
-        sendResponse(await http('/api/mfa/send', { txnId: msg.txnId }));
+        let res, source;
+        try {
+          res = await api('/api/mfa/send', { txnId: msg.txnId });
+          source = 'server';
+        } catch {
+          const txnId = offlineTxnId(msg.txnId);
+          const code = String(Math.floor(100000 + Math.random() * 900000));
+          mfaCodes.set(txnId, { code, expiresAt: Date.now() + OFFLINE_TTL_MS });
+          res = { ok: true, status: 'sent', code, expiresInSec: OFFLINE_TTL_MS / 1000 };
+          source = 'offline';
+        }
+        sendResponse({ ...res, source });
       } else if (msg.type === 'mfaVerify') {
-        sendResponse(await http('/api/mfa/verify', { txnId: msg.txnId, code: msg.code }));
+        let res, source;
+        try {
+          res = await api('/api/mfa/verify', { txnId: msg.txnId, code: msg.code });
+          source = 'server';
+        } catch {
+          const rec = mfaCodes.get(msg.txnId);
+          if (!rec) res = { ok: false, error: 'no challenge active' };
+          else if (Date.now() > rec.expiresAt) {
+            mfaCodes.delete(msg.txnId);
+            res = { ok: false, error: 'code expired' };
+          } else if (String(rec.code) !== String(msg.code)) res = { ok: false, error: 'invalid code' };
+          else {
+            mfaCodes.delete(msg.txnId);
+            res = { ok: true, verified: true };
+          }
+          source = 'offline';
+        }
+        sendResponse({ ...res, source });
       } else if (msg.type === 'scanpage') {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab) return sendResponse({ ok: false, error: 'no active tab' });
