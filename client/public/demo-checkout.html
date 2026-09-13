@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <!-- A standalone vendor store with no fraud logic of its own.
+       Install the guard extension, shop here, and watch it protect a
+       checkout page it knows nothing about. -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kicks Store — checkout</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: #f6f3ec; color: #2b2b33;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      header.storebar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 24px; background: #fff; border-bottom: 2px solid #e5e0d6;
+        position: sticky; top: 0;
+      }
+      .logo { font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+      .logo-bolt { font-size: 20px; }
+      .net-tag {
+        font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 999px;
+        border: 2px solid transparent; cursor: pointer; background: #e9f5e9; color: #2e7d32;
+        border-color: #cfe6cf;
+      }
+      .net-tag.vpn { background: #fdecec; color: #b3261e; border-color: #f6cfcf; }
+      main { max-width: 860px; margin: 0 auto; padding: 24px; }
+      .cols { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 20px; }
+      @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+      .prod { background: #fff; border: 2px solid #e5e0d6; border-radius: 14px; padding: 14px; }
+      .prod.selected { border-color: #2b2b33; box-shadow: 0 0 0 3px #ffd9a0; }
+      .prod-img { height: 60px; border-radius: 10px; border: 2px solid #2b2b33; margin-bottom: 8px; }
+      .prod h3 { margin: 0 0 2px; font-size: 15px; }
+      .price { font-weight: 800; font-size: 15px; }
+      .sub { font-size: 11px; color: #8a8a93; }
+      .form-card { background: #fff; border: 2px solid #e5e0d6; border-radius: 14px; padding: 18px; }
+      .form-card h2 { margin: 0 0 12px; font-size: 19px; }
+      .field { margin-bottom: 12px; }
+      .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+      .field input {
+        width: 100%; border: 2px solid #2b2b33; border-radius: 10px; padding: 9px 10px;
+        font: inherit; background: #fff;
+      }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .actions { display: flex; gap: 8px; margin: 14px 0 6px; }
+      button {
+        border: 2px solid #2b2b33; border-radius: 999px; padding: 10px 16px; font: inherit;
+        font-weight: 700; cursor: pointer; background: #f2f0ea;
+      }
+      button:hover { filter: brightness(0.96); }
+      button.pay { background: #2b2b33; color: #fff; flex: 1; }
+      button.check { background: #e9f5e9; }
+      .note { font-size: 11px; color: #8a8a93; margin-top: 8px; }
+      .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(43,43,51,.35); z-index: 100; }
+      .panel .box { background: #fff; border: 3px solid #2b2b33; border-radius: 16px;
+        padding: 22px 28px; width: min(360px, 90vw); text-align: center; }
+      .spinner { width: 34px; height: 34px; border: 4px solid #e5e0d6; border-top-color: #2b2b33;
+        border-radius: 50%; margin: 0 auto 12px; animation: spin .8s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .sellout { font-size: 13px; color: #8a8a93; margin-top: 10px; }
+      footer.trust { text-align: center; padding: 16px; font-size: 12px; color: #8a8a93; }
+      footer.trust a { color: #2e7d32; text-decoration: none; font-weight: 700; margin: 0 10px; }
+      footer.trust .lock { font-weight: 800; }
+    </style>
+  </head>
+  <body data-tp-merchant="Kicks Store" data-tp-typical="119">
+    <header class="storebar">
+      <div class="logo"><span class="logo-bolt">⚡</span> Kicks Store</div>
+      <!-- Network context the merchant/payment gateway would report to fraud checks -->
+      <button id="netToggle" class="net-tag" title="Click to simulate network context">📶 Home WiFi · India</button>
+    </header>
+
+    <main>
+      <h1>Checkout</h1>
+      <div class="cols">
+        <section>
+          <div id="prods" class="prods"></div>
+        </section>
+        <section>
+          <div class="form-card">
+            <form id="payForm" novalidate>
+              <div class="field"><label for="nm">Name on card</label><input id="nm" autocomplete="name" placeholder="John Alston" /></div>
+              <div class="field"><label for="cc">Card number</label><input id="cc" data-card autocomplete="cc-number" placeholder="4242 4242 4242 4242" inputmode="numeric" /></div>
+              <div class="row">
+                <div class="field"><label for="ex">Expiry</label><input id="ex" autocomplete="cc-exp" placeholder="12 / 28" /></div>
+                <div class="field"><label for="cv">CVC</label><input id="cv" autocomplete="cc-csc" placeholder="737" /></div>
+              </div>
+              <div class="actions">
+                <button type="button" id="fillAlex" class="check">😀 Fill like Alex</button>
+                <button type="button" id="fillShady" class="check">😈 Fill like Shady</button>
+              </div>
+              <div class="actions">
+                <button type="submit" class="pay" data-tp-price="119" data-tp-item="Court Classic"><span id="payLabel">Pay $119</span></button>
+              </div>
+              <p class="note">This store has zero fraud logic. What happens if a thief fills this form?</p>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="trust">
+      <span class="lock">🔒 Secure checkout</span>
+      <a href="#">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <a href="#">Help &amp; Contact</a>
+    </footer>
+
+    <div class="panel" id="panel">
+      <div class="box" id="panelBox">
+        <div class="spinner"></div>
+        <div id="panelTitle">Processing order…</div>
+        <div class="sellout" id="panelSub"></div>
+      </div>
+    </div>
+
+    <script>
+      const CATALOG = [
+        { id: 'cloud', name: 'Cloudrunner', price: 89, color: '#c8d8ff' },
+        { id: 'court', name: 'Court Classic', price: 119, color: '#f5c86b' },
+        { id: 'vapor', name: 'Vapor Max', price: 229, color: '#ff9f9f' },
+        { id: 'drop', name: 'Drop Dead Limited', price: 489, color: '#2b2b33' },
+      ];
+      let selected = CATALOG[1];
+      const prodsEl = document.getElementById('prods');
+      prodsEl.innerHTML = CATALOG.map((p) => `
+        <div class="prod${p.id === selected.id ? ' selected' : ''}" data-id="${p.id}">
+          <div class="prod-img" style="background:${p.color}"></div>
+          <h3>${p.name}</h3>
+          <div class="price">$${p.price}</div>
+          <div class="sub">${p.price > 119 ? 'big-ticket item' : 'typical order'}</div>
+        </div>`).join('');
+
+      prodsEl.addEventListener('click', (e) => {
+        const card = e.target.closest('.prod');
+        if (!card) return;
+        selected = CATALOG.find((p) => p.id === card.dataset.id);
+        document.querySelectorAll('.prod').forEach((c) =>
+          c.classList.toggle('selected', c === card));
+        document.getElementById('payLabel').textContent = 'Pay $' + selected.price;
+        const payBtn = document.getElementById('payForm').querySelector('button.pay');
+        payBtn.setAttribute('data-tp-price', String(selected.price));
+        payBtn.setAttribute('data-tp-item', selected.name);
+      });
+
+      // "Fill like X" — real events the guard listens to.
+      const fill = (alex) => {
+        const set = (id, val, { gap = 5, paste = false } = {}) => {
+          const el = document.getElementById(id);
+          el.value = '';
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          if (paste) {
+            el.dispatchEvent(new ClipboardEvent('paste', {
+              bubbles: true, clipboardData: new DataTransfer(),
+            }));
+            el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            return;
+          }
+          for (const ch of val) {
+            el.focus();
+            el.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true }));
+            el.value += ch;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            if (gap) {
+              const end = performance.now() + gap;
+              while (performance.now() < end) { /* native busy wait ≈ typing pace */ }
+            }
+          }
+        };
+        if (alex) {
+          set('nm', 'John Alston', { gap: 150 });
+          set('cc', '4242 4242 4242 4242', { gap: 130 });
+          set('ex', '12728', { gap: 120 });
+          set('cv', '737', { gap: 140 });
+        } else {
+          set('nm', 'John Alston', { gap: 12 });
+          set('cc', '4242 4242 4242 4242', { paste: true });
+          set('ex', '12728', { gap: 14 });
+          set('cv', '737', { gap: 10 });
+        }
+      };
+      document.getElementById('fillAlex').addEventListener('click', () => fill(true));
+      document.getElementById('fillShady').addEventListener('click', () => fill(false));
+
+      // Network context toggle → becomes the merchant-reported context.
+      const netBtn = document.getElementById('netToggle');
+      let vpn = false;
+      const setNet = (on) => {
+        vpn = on;
+        document.body.setAttribute('data-tp-net', on ? 'vpn' : 'clean');
+        document.body.setAttribute('data-tp-ip-country', on ? 'DE' : 'IN');
+        document.body.setAttribute('data-tp-card-country', 'US');
+        netBtn.textContent = on ? '📶 VPN · Germany 🇩🇪' : '📶 Home WiFi · India';
+        netBtn.classList.toggle('vpn', on);
+      };
+      netBtn.addEventListener('click', () => setNet(!vpn));
+      setNet(false);
+
+      // Purchase flow (fake store, no backend). The guard may intercept first.
+      const panel = document.getElementById('panel');
+      const box = document.getElementById('panelBox');
+      document.getElementById('payForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        panel.style.display = 'flex';
+        box.innerHTML = `
+          <div class="spinner"></div>
+          <div>Processing order…</div>
+        `;
+        setTimeout(() => {
+          box.innerHTML = `<div style="font-size:40px">🎉</div>
+            <div style="font-weight:800;font-size:18px">Order placed — ${selected.name}!</div>
+            <div class="sellout">$${selected.price} · Kicks Store</div>`;
+        }, 900);
+      });
+    </script>
+  </body>
+</html>

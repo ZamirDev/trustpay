@@ -20,7 +20,7 @@ export const WEIGHTS = {
   base: 4,
   deviceUnseen: 18,
   typingErratic: 15,
-  cardPasted: 12,
+  cardPasted: 16,
   vpn: 14,
   countryMismatch: 12,
   mouseJitterHigh: 8,

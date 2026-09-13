@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TrustPay Guard</title>
+    <link rel="stylesheet" href="guard.css" />
+  </head>
+  <body class="popup">
+    <header class="popup-head">
+      <svg class="popup-mascot" viewBox="0 0 100 100">
+        <rect x="14" y="26" width="72" height="48" rx="10" fill="#9FE6A0" stroke="#3D2C2E" stroke-width="5" />
+        <rect x="14" y="26" width="72" height="16" rx="8" fill="#F5C86B" stroke="#3D2C2E" stroke-width="5" />
+        <circle cx="70" cy="60" r="7" fill="#FF9F9F" stroke="#3D2C2E" stroke-width="4" />
+      </svg>
+      <div>
+        <h1>TrustPay Guard</h1>
+        <p>explainable checkout fraud risk</p>
+      </div>
+    </header>
+
+    <section class="scan">
+      <button id="scanBtn" class="clay-btn clay-btn-primary">🔍 Is this payment page safe?</button>
+      <div id="scanResult" class="scan-result"></div>
+    </section>
+
+    <section class="guard">
+      <button id="attachBtn" class="clay-btn">🛡 Attach guard</button>
+      <p class="hint">Blocks a suspicious submit with a code check on this checkout.</p>
+    </section>
+
+    <section id="verdict" class="verdict">
+      <div class="empty">No live risk check yet — submit a checkout.</div>
+    </section>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
