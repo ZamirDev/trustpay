@@ -85,6 +85,18 @@ Extension demo: a standalone store checkout (legit → green) and a phishing clo
 70/challenge → auto-block), plus a real Stripe-iframe checkout correctly recognized as a
 hosted payment page.
 
+**Late-opening payment popups.** Real gateways (Easebuzz EaseCheckout, Razorpay, etc.) don't
+put the card inline — they open a dark-overlay modal *after* the page loads. A one-shot scan
+would see nothing. So every scan arms a **60-second page watch**: a MutationObserver
+(300 ms debounce, iframe-load events armed separately, re-armable, never doubled) re-runs the
+scanner, and if the verdict changes the banner re-renders live *and* the background worker is
+notified (`tpScanUpdate`). A card form that posts to a known processor
+(Easebuzz/Cashfree/PayU/CCAvenue/BillDesk/Instamojo/…) is a ✓ **note**, not a cross-origin
+factor, and same-origin iframe card fields are readable via `frameDocs()`. A red late verdict
+auto-attaches the block-guard with no further interaction. Worth noting: the scanner also
+recognizes the *src* of stored processor scripts, so even a iframe you can't read (cross-origin)
+is still acknowledged as the real processor.
+
 ## 5. Architecture & security posture
 
 - **Thin client, stateless API.** The API is a pure function over signals; no external
