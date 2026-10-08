@@ -9,7 +9,7 @@ final submit is one click. Submission itself is **deferred until after the hacka
 | Item | Spec | Owner |
 |---|---|---|
 | Screenshot 1 | 1280×800 (or 640×400) — full extension demo on a real checkout | user (Chrome screenshot) |
-| Screenshot 2 | 1280×800 — "Is this payment page safe?" result on a fake page | user |
+| Screenshot 2 | 1280×800 — "Is this page safe?" result on a fake page | user |
 | Screenshot 3 | 640×400 — popup verdict card | user |
 | Promo tile | **440×280** | user |
 | Small promo tile | **440×280** (same as promo, store may reuse) | user |
@@ -31,10 +31,13 @@ TrustPay Guard watches how you pay — typing cadence, paste-vs-type, mouse moti
 speed — and scores every checkout 0–100 with every point explained. Good shoppers glide
 through. Risky ones get a quick code check before any card is charged.
 
-· Guard: attach to any checkout page, auto-block critical submits, step-up code overlay
-· Scan: "is this payment page safe?" — typosquat domains, cross-origin POSTs, sensitive
-  overreach (ATM PIN/OTP/SSN beside a card), and embedded payment iframes (Stripe, PayPal,
-  Braintree, Adyen, Razorpay…) are recognized with readable reasons
+· Guard: attach to any checkout or sign-in page, auto-block critical submits, step-up code
+  overlay for payments, leave/continue warning for phishing logins
+· Scan: "is this page safe?" — typosquat domains, brand impersonation (title claims Google,
+  host isn't), cross-origin POSTs, sensitive overreach (ATM PIN/OTP/SSN beside a card,
+  date-of-birth beside a password), and embedded payment iframes (Stripe, PayPal,
+  Braintree, Adyen, Razorpay, Easebuzz…) are recognized with readable reasons — a short
+  watch then re-scores the page if a payment popup opens after the scan
 · Explainable: top-3 factors + a one-line reason shown for every verdict
 · Offline: ships its own risk engine, works with no server
 · Private: never collects card numbers, no trackers, signals leave the browser only when the
@@ -49,7 +52,7 @@ through. Risky ones get a quick code check before any card is charged.
 
 1. Open chrome://extensions → Load unpacked → this folder.
 2. Visit any page at http://localhost:5173 (or any site) and click the 🛡 icon → "Is this
-   payment page safe?" → a verdict card appears.
+   page safe?" → a verdict card appears.
 3. On a checkout page, click "Attach guard", fill the form, submit → toast verdict; a
    high-risk submit is blocked with a code overlay (code shown in the overlay — demo mode).
 

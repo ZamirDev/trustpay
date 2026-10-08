@@ -1,8 +1,9 @@
 // guardInPage.js — TrustPay Guard core (content-script / isolated world).
-// Auto-attached on localhost pages AND injected on demand via "Scan this page".
-// Finds a checkout form, feeds live behavioral signals to the TrustPay engine
-// through the background bridge, and blocks high-risk submits with an
-// explainable, clay-styled MFA overlay.
+// Auto-attached on localhost pages AND injected on demand via "Attach guard".
+// Finds a checkout form (behavioral risk + MFA) or a login form (fresh page
+// scan on submit, warn + block), feeds signals to the TrustPay engine through
+// the background bridge, and blocks high-risk submits with explainable
+// Night-styled overlays.
 
 (() => {
   if (globalThis.__TP_GUARD__) return;
@@ -57,6 +58,15 @@
     if (!card) return null;
     const form = card.closest('form') || document;
     return { form, card };
+  }
+
+  // ---- login / sign-up detection (only when it's not also a checkout) ----
+  function findLoginForm() {
+    if (document.querySelector('input[type="password"]') == null) return null;
+    if (findCheckout()) return null; // payment pages keep the card flow
+    const pw = document.querySelector('input[type="password"]');
+    const form = pw.closest('form') || document;
+    return { form, pw };
   }
 
   function readNet() {
@@ -171,36 +181,44 @@
     const style = document.createElement('style');
     style.id = 'tp-guard-style';
     style.textContent = `
-      .tp-backdrop{position:fixed;inset:0;z-index:2147483000;background:rgba(61,44,46,.45);
-        display:flex;align-items:center;justify-content:center;font-family:system-ui,'Segoe UI',sans-serif}
-      .tp-modal{background:#fefbf4;color:#3d2c2e;border:3px solid #3d2c2e;border-radius:16px;
-        box-shadow:0 12px 0 rgba(61,44,46,.18);padding:22px;width:min(380px,92vw);max-height:92vh;overflow:auto}
-      .tp-modal h2{margin:0 0 6px;font-size:18px}
-      .tp-note{font-size:12px;color:rgba(61,44,46,.6);margin:0 0 12px}
+      .tp-backdrop{position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.85);
+        display:flex;align-items:center;justify-content:center;font-family:ui-monospace,'Cascadia Mono',Consolas,monospace}
+      .tp-modal{background:#000;color:#fff;border:2px solid #fff;border-radius:0;
+        box-shadow:none;padding:24px;width:min(380px,92vw);max-height:92vh;overflow:auto}
+      .tp-modal h2{margin:0 0 6px;font-size:20px;font-family:Georgia,'Times New Roman',serif;font-weight:400;
+        text-transform:uppercase;letter-spacing:-0.02em;color:#cecece}
+      .tp-note{font-size:12px;color:#8d8d8d;margin:0 0 12px;line-height:1.5}
       .tp-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
       .tp-ball{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-        font-size:21px;font-weight:800;color:#fff;border:3px solid #3d2c2e;flex-shrink:0;background:#b3261e}
-      .tp-level{font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:.5px;color:#b3261e}
-      .tp-sub{font-size:12px;color:rgba(61,44,46,.6);margin:2px 0 0}
+        font-size:21px;font-weight:400;color:#fff;border:3px solid #fff;flex-shrink:0;background:#000;
+        box-shadow:none}
+      .tp-level{font-weight:400;font-size:17px;text-transform:uppercase;letter-spacing:-0.01em;color:#fff;
+        font-family:Georgia,'Times New Roman',serif}
+      .tp-sub{font-size:12px;color:#8d8d8d;margin:2px 0 0}
       .tp-factors{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:6px}
-      .tp-factors li{display:flex;justify-content:space-between;gap:10px;background:#f7efe1;border:2px solid #e6d9c3;
-        border-radius:10px;padding:7px 10px;font-size:13px;font-weight:600}
-      .tp-factors .impact{color:#b3261e;font-weight:800;white-space:nowrap}
-      .tp-sms{background:#8fc1ff;border:2px solid #3d2c2e;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600}
-      .tp-sms code{background:#fff;border:2px solid #3d2c2e;padding:1px 8px;border-radius:6px;font-size:15px}
+      .tp-factors li{display:flex;justify-content:space-between;gap:10px;background:#0a0a0a;border:1px solid #484848;
+        border-left:3px solid #8d8d8d;border-radius:0;padding:7px 10px;font-size:12px;font-weight:400}
+      .tp-factors .impact{color:#cecece;font-weight:400;white-space:nowrap}
+      .tp-sms{background:#141414;border:1px solid #484848;border-top:1px solid #8d8d8d;border-radius:0;padding:10px 12px;font-size:12px;font-weight:400}
+      .tp-sms code{background:#000;border:1px solid #484848;padding:1px 8px;border-radius:0;font-size:16px;letter-spacing:4px;color:#fff}
       .tp-field{margin:12px 0}
-      .tp-field label{font-size:12px;font-weight:700;display:block;margin-bottom:4px}
-      .tp-field input{width:100%;border:2px solid #3d2c2e;border-radius:10px;padding:9px 10px;font:inherit;background:#fff}
+      .tp-field label{font-size:10px;font-weight:400;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:2px;color:#8d8d8d}
+      .tp-field input{width:100%;border:1px solid #484848;border-radius:0;padding:10px;font:inherit;background:#000;color:#fff}
+      .tp-field input:focus{outline:none;border-color:#fff}
       .tp-actions{display:flex;gap:10px}
-      .tp-btn{border:2px solid #3d2c2e;background:#f7efe1;color:#3d2c2e;font:inherit;font-weight:700;padding:9px 16px;border-radius:999px;cursor:pointer}
-      .tp-btn:hover{filter:brightness(.97)}
-      .tp-btn-primary{background:#3d2c2e;color:#fefbf4}
-      .tp-btn-green{background:#9fe6a0;color:#3d2c2e}
-      .tp-err{color:#b3261e;font-weight:700;font-size:13px;min-height:1em}
-      .tp-toast{position:fixed;right:14px;top:14px;z-index:2147483001;background:#9fe6a0;color:#3d2c2e;border:2px solid #3d2c2e;
-        border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;box-shadow:0 4px 0 rgba(61,44,46,.15)}
-      .tp-toast.amber{background:#f5c86b}
-      .tp-toast.red{background:#ff9f9f}
+      .tp-btn{border:2px solid #fff;background:transparent;color:#fff;font:inherit;font-weight:400;padding:9px 16px;
+        border-radius:999px;cursor:pointer;text-transform:uppercase;letter-spacing:2px;font-size:11px;
+        transition:background-color .1s linear,color .1s linear}
+      .tp-btn:hover{background:#fff;color:#000}
+      .tp-btn-primary{background:#fff;color:#000}
+      .tp-btn-green{background:#03955b;border-color:#03955b;color:#fff}
+      .tp-btn-green:hover{background:transparent;color:#0ec37a;border-color:#03955b}
+      .tp-err{color:#d98a4f;font-weight:400;font-size:13px;min-height:1em;text-transform:uppercase;letter-spacing:1px}
+      .tp-toast{position:fixed;right:14px;top:14px;z-index:2147483001;background:#03955b;color:#fff;border:2px solid #03955b;
+        border-radius:0;padding:9px 14px;font-weight:400;font-size:13px;box-shadow:none;
+        text-transform:uppercase;letter-spacing:1px}
+      .tp-toast.amber{background:#ba6a36;border-color:#ba6a36}
+      .tp-toast.red{background:#000;color:#fff;border-color:#fff}
     `;
     (document.head || document.documentElement).appendChild(style);
   }
@@ -239,7 +257,7 @@
     }
     const state = verdict;
     overlay.querySelector('.tp-ball').textContent = state.score;
-    overlay.querySelector('.tp-ball').style.background = '#b3261e';
+    overlay.querySelector('.tp-ball').style.background = '#000';
     overlay.querySelector('.tp-level').textContent = `challenge · ${state.score}`;
     overlay.querySelector('.tp-sub').textContent =
       'Blocked before any charge. Confirm it\u2019s you.';
@@ -285,12 +303,63 @@
 
   function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+  // ---- login-block overlay: the SITE is the suspect, so warn + leave (no MFA theatre) ----
+  function showLoginWarn(scan) {
+    ensureCss();
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'tp-backdrop';
+      overlay.innerHTML = `
+        <div class="tp-modal">
+          <h2>🛡 TrustPay Guard</h2>
+          <p class="tp-note">This sign-in page failed its trust scan. Sending your password here could hand your account to someone else.</p>
+          <div class="tp-row">
+            <div class="tp-ball"></div>
+            <div><div class="tp-level"></div><div class="tp-sub"></div></div>
+          </div>
+          <ul class="tp-factors"></ul>
+          <div class="tp-actions">
+            <button class="tp-btn tp-btn-green" data-act="leave">Leave this page</button>
+            <button class="tp-btn" data-act="stay">Continue anyway</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+    overlay.querySelector('.tp-ball').textContent = scan.score;
+    overlay.querySelector('.tp-level').textContent = `${scan.action} · ${scan.score}`;
+    overlay.querySelector('.tp-sub').textContent = 'Blocked before your password left the browser.';
+    const list = overlay.querySelector('.tp-factors');
+    list.innerHTML = (scan.factors || [])
+      .map((f) => `<li><span>${esc(f.label)}</span><span class="impact">+${f.impact}</span></li>`)
+      .join('');
+
+    return new Promise((resolve) => {
+      const done = (ok) => {
+        overlay.remove();
+        overlay = null;
+        resolve(ok);
+      };
+      overlay.querySelector('[data-act="leave"]').addEventListener('click', () => {
+        // leave for real when we can, otherwise just close the warning
+        if (history.length > 1) history.back();
+        else location.replace('about:blank');
+        done(false);
+      });
+      overlay.querySelector('[data-act="stay"]').addEventListener('click', () => done(true));
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) done(false); });
+    });
+  }
+
   // ---- main loop ----
   async function boot() {
     if (document.querySelector('.risk-widget')) return; // our hosted app — skip
     const checkout = findCheckout();
-    if (!checkout) return;
-    const { form } = checkout;
+    if (checkout) return bootCheckout(checkout.form);
+    if (findLoginForm()) return bootLogin();
+  }
+
+  // checkout flow: behavioral risk engine + MFA challenge (unchanged)
+  async function bootCheckout(form) {
     ensureCss();
     const collect = makeCollector(form);
     let approvedPass = false;
@@ -334,6 +403,54 @@
         toast('🚫 Purchase blocked — card not charged', 'red');
       }
     });
+  }
+
+  // login flow: fresh page-trust scan on submit → warn + leave on a red verdict.
+  // Listens on document in the CAPTURE phase so the guard decides BEFORE the
+  // page's own submit handler runs (the fake "success" panel must not flash).
+  async function bootLogin() {
+    ensureCss();
+    let approvedPass = false;
+
+    document.addEventListener('submit', async (e) => {
+      if (approvedPass) { approvedPass = false; return; }
+      // only the form that owns a password field
+      const frm = e.target;
+      if (!frm || typeof frm !== 'object' || !frm.querySelector) return;
+      if (!frm.querySelector('input[type="password"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const src = typeof frm.requestSubmit === 'function' ? frm : null;
+      const go = () => { if (src) src.requestSubmit(); };
+
+      const res = await chrome.runtime.sendMessage({ type: 'pagescan' }).catch(() => null);
+      const scan = res && res.ok ? res.scan : null;
+      if (!scan || scan.action === 'error' || !scan.action) {
+        toast('TrustPay Guard: could not verify this page', 'red');
+        return;
+      }
+
+      if (scan.action === 'allow') {
+        toast('✅ TrustPay: sign-in looks safe', '');
+        approvedPass = true;
+        go();
+        return;
+      }
+      if (scan.action === 'review') {
+        toast('🟡 TrustPay: double-check this sign-in', 'amber');
+        setTimeout(() => { approvedPass = true; go(); }, 1400);
+        return;
+      }
+
+      const stay = await showLoginWarn(scan);
+      if (stay) {
+        toast('⚠ Continuing anyway — you were warned', 'amber');
+        approvedPass = true;
+        go();
+      } else {
+        toast('🚫 Sign-in blocked — password never sent', 'red');
+      }
+    }, true);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

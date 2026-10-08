@@ -65,17 +65,31 @@ Switch to **Shady 😈**.
 Open **`/demo-checkout.html`** (a standalone store with no TrustPay code).
 1. Type/paste a card, pay → TrustPay Guard (extension) gives the same allow/challenge
    behavior with a **badge score in the toolbar**.
-2. Popup → **"Is this payment page safe?"** → green verdict + reasons.
+2. Popup → **"🔍 Is this page safe?"** → green verdict + reasons.
 3. Open **`/demo-phish.html`** (label it explicitly: *simulated phishing page, nothing is
    captured*) → scan → **70 / challenge**, *"Form also asks for ATM PIN"*, and the guard
    **auto-attaches** to block it.
+4. Open **`/demo-login.html`** (label it: *simulated fake Google sign-in, nothing is
+   captured*) → scan → **75 / challenge**, *"Page claims to be google, but localhost is not
+   a google domain"* + *"Form submits to evil.example.net"* → guard auto-attaches → type an
+   email + password and hit **Next** → the **warning overlay** stops the submit before the
+   password leaves the browser: **Leave this page** (primary) / **Continue anyway**.
+5. Open **`/demo-popup.html`** (label: *simulated subscription page — the payment popup is a
+   local fake of an Easebuzz checkout*) → scan **first** → *"No login or card form"* plus
+   *"◉ watching for payment popups…"*. Now click **Subscribe with Easebuzz** — without
+   touching the extension again, the banner **flips live** to **0 / allow · payment form
+   detected · hosted by Easebuzz** + *"Card form posts to a known payment processor"*.
 
 > "Same engine, but now protecting any page in the browser — we caught a fake checkout that
-> ships your card AND your PIN to a sketchy domain, and we show you exactly why."
+> ships your card AND your PIN to a sketchy domain, and a fake sign-in that claims to be
+> Google while POSTing your password to a foreign host. And real sites rarely put cards
+> inline — they open the gateway popup AFTER page load: one scan arms a 60-second watch, the
+> moment that overlay appears we re-score the page, recognize the real processor — and if a
+> fake overlay ever shows up red, the guard attaches by itself."
 
 ---
 
-## 6:00 — Close (15 sec)
+## 6:30 — Close (15 sec)
 
 > "Merchant dashboard live on the left — every verdict, score, and its reasons. Explainable,
 > tunable, and it demos in six minutes." → `#/dashboard`.
@@ -91,4 +105,7 @@ Open **`/demo-checkout.html`** (a standalone store with no TrustPay code).
 | Shady 😈 → Pay | **100 / challenge** → MFA → approved |
 | demo-checkout → scan | **0 / allow** |
 | demo-phish → scan | **70 / challenge** + auto guard |
+| demo-login → scan | **75 / challenge** (brand_spoof 40 + cross-origin 35) + submit blocked |
+| demo-popup → scan (popup closed) | **nothing to scan** + "◉ watching for payment popups…" |
+| demo-popup → open the popup (live, no re-click) | **0 / allow · payment · hosted by Easebuzz** |
 | real Stripe-iframe checkout → scan | **allow**, "hosted by Stripe" note |

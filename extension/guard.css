@@ -1,77 +1,121 @@
-/* TrustPay Guard popup — clay theme */
+/* TrustPay Guard popup — Night theme */
+
+:root {
+  --ink: #ffffff;
+  --paper: #000000;
+  --paper-2: #0a0a0a;
+  --line: #484848;
+  --dim: #8d8d8d;
+  --display: #cecece;
+  --green: #03955b;
+  --green-ink: #0ec37a;
+  --amber: #ba6a36;
+  --amber-ink: #d98a4f;
+}
 
 * { box-sizing: border-box; }
 
 body.popup {
   width: 300px;
   margin: 0;
-  background: #fefbf4;
-  color: #3d2c2e;
-  font-family: system-ui, 'Segoe UI', sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Segoe UI Mono', monospace;
+  font-size: 13px;
   padding: 14px;
 }
 
 .popup-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .popup-mascot { width: 36px; height: 36px; }
-.popup-head h1 { margin: 0; font-size: 16px; line-height: 1.1; }
-.popup-head p { margin: 0; font-size: 11px; color: rgba(61, 44, 46, 0.6); }
+.popup-head h1 {
+  margin: 0; font-size: 17px; line-height: 1;
+  font-family: Georgia, 'Times New Roman', serif; font-weight: 400;
+  text-transform: uppercase; letter-spacing: -0.02em;
+}
+.popup-head p {
+  margin: 0; font-size: 9px; color: var(--dim);
+  font-weight: 400; text-transform: uppercase; letter-spacing: 2px;
+}
 
 .verdict {
-  background: #f7efe1;
-  border: 2px solid #e6d9c3;
-  border-radius: 14px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 0;
   padding: 12px;
   min-height: 64px;
   margin-bottom: 12px;
+  position: relative;
 }
-.verdict .empty { font-size: 12px; color: rgba(61, 44, 46, 0.6); }
+.verdict::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin: -12px -12px 12px;
+  background: var(--dim);
+}
+.verdict .empty { font-size: 12px; color: var(--dim); }
 .v-row { display: flex; align-items: center; gap: 10px; }
 .v-ball {
   width: 44px; height: 44px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px; font-weight: 800; color: #fff;
-  border: 2px solid #3d2c2e; flex-shrink: 0;
+  font-size: 17px; font-weight: 400; color: #fff;
+  border: 2px solid var(--ink);
+  box-shadow: none;
+  flex-shrink: 0;
 }
-.v-bad .v-ball { background: #b3261e; }
-.v-ok .v-ball { background: #2e7d32; }
-.v-mid .v-ball { background: #e0a32e; }
-.v-level { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.4px; }
-.v-page { font-size: 11px; color: rgba(61, 44, 46, 0.55); word-break: break-all; }
+.v-bad .v-ball { background: var(--paper); border-color: var(--ink); color: var(--ink); }
+.v-ok .v-ball { background: var(--green); border-color: var(--green); }
+.v-mid .v-ball { background: var(--amber); border-color: var(--amber); }
+.v-level {
+  font-weight: 400; font-size: 15px;
+  text-transform: uppercase; letter-spacing: -0.01em;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.v-ok .v-level { color: var(--green-ink); }
+.v-mid .v-level { color: var(--amber-ink); }
+.v-page { font-size: 10px; color: var(--dim); word-break: break-all; }
 .off-tag {
-  display: inline-block; margin-top: 4px; font-size: 9px; font-weight: 800;
-  letter-spacing: 0.3px; text-transform: uppercase; color: #8a5a00;
-  background: #f5c86b; border: 2px solid #3d2c2e; border-radius: 999px; padding: 1px 8px;
+  display: inline-block; margin-top: 4px; font-size: 9px; font-weight: 400;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim);
+  background: transparent; border: 1px solid var(--dim); border-radius: 0; padding: 1px 8px;
 }
 .v-factors { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
 .v-factors li {
   display: flex; justify-content: space-between; gap: 8px;
-  font-size: 12px; font-weight: 600;
-  background: #fff; border: 2px solid #e6d9c3; border-radius: 8px; padding: 5px 8px;
+  font-size: 11px; font-weight: 400;
+  background: var(--paper); border: 1px solid var(--line);
+  border-left: 3px solid var(--dim);
+  border-radius: 0; padding: 6px 8px;
 }
-.v-factors .impact { color: #b3261e; font-weight: 800; }
+.v-factors .impact { color: var(--display); font-weight: 400; }
 
 .clay-btn {
   display: block;
   width: 100%;
-  border: 2px solid #3d2c2e;
-  background: #f7efe1;
-  color: #3d2c2e;
+  border: 2px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
   font: inherit;
-  font-weight: 700;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 11px;
   padding: 10px 16px;
   border-radius: 999px;
   cursor: pointer;
+  transition: background-color 0.1s linear, color 0.1s linear;
 }
-.clay-btn:hover { filter: brightness(0.97); }
-.clay-btn:active { transform: translateY(1px); }
-.clay-btn-primary { background: #3d2c2e; color: #fefbf4; }
+.clay-btn:hover { background: var(--ink); color: var(--paper); }
+.clay-btn:active { background: var(--ink); color: var(--paper); }
+.clay-btn-primary { background: var(--ink); color: var(--paper); }
+.clay-btn-primary:hover { background: transparent; color: var(--ink); }
 
-.hint { font-size: 10.5px; color: rgba(61, 44, 46, 0.55); text-align: center; margin: 8px 0 0; }
+.hint { font-size: 10px; color: var(--dim); text-align: center; margin: 8px 0 0; text-transform: uppercase; letter-spacing: 1px; line-height: 1.5; }
 
 .scan { margin-bottom: 10px; }
 .scan-result { margin-top: 10px; }
-.scan-notes { margin-top: 8px; font-size: 11.5px; color: rgba(61, 44, 46, 0.75); font-weight: 600; display: grid; gap: 2px; }
-.scan-ok { font-size: 12px; font-weight: 700; color: #2e7d32; margin: 8px 0 0; }
-.scan-cta { font-size: 11px; font-weight: 800; color: #b3261e; margin: 8px 0 0; }
-.guard { border-top: 2px dashed #e6d9c3; padding-top: 10px; }
+.scan-notes { margin-top: 8px; font-size: 11px; color: var(--dim); font-weight: 400; display: grid; gap: 3px; line-height: 1.5; }
+.scan-ok { font-size: 11px; font-weight: 400; color: var(--green-ink); margin: 8px 0 0; text-transform: uppercase; letter-spacing: 1px; }
+.scan-cta { font-size: 10px; font-weight: 400; color: var(--amber-ink); margin: 8px 0 0; text-transform: uppercase; letter-spacing: 1.5px; }
+.guard { border-top: 1px solid var(--dim); padding-top: 10px; }
 .guard .hint { margin-top: 6px; }

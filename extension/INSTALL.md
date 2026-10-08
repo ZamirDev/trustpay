@@ -23,7 +23,7 @@ Two features:
 | Feature | What it does | Needs API? |
 |---|---|---|
 | **🛡 Guard** | Watches a checkout form's typing/paste/mouse, scores the submit, blocks high-risk ones with a code-check overlay | No — scores offline in the extension |
-| **🔍 Is this payment page safe?** | Scans the current page for trust signals (typosquat, cross-origin POST, sensitive overreach, payment iframes) | No — pure page analysis |
+| **🔍 Is this page safe?** | Scans the current page for trust signals (typosquat, brand impersonation, cross-origin POST, sensitive overreach, payment iframes) — scores card forms **and** login/sign-up forms | No — pure page analysis |
 
 **Offline vs server mode.** The extension ships its own copy of the risk model and works
 completely standalone. If the TrustPay API is reachable (http://localhost:4000, or the live
@@ -41,9 +41,11 @@ cd server && npm install && npm run start   # optional — dashboard parity only
 cd client && npm install && npm run dev     # http://localhost:5173
 ```
 
-Then visit **http://localhost:5173/demo-checkout.html** (a legit store) and
-**http://localhost:5173/demo-phish.html** (a simulated phishing page — nothing is captured).
-Or hand the guard any checkout page on `http://localhost`.
+Then visit **http://localhost:5173/demo-checkout.html** (a legit store),
+**http://localhost:5173/demo-phish.html** (a simulated phishing page — nothing is captured)
+and **http://localhost:5173/demo-login.html** (a simulated fake Google sign-in — nothing is
+captured; the guard blocks the password before it leaves the browser).
+Or hand the guard any checkout or sign-in page on `http://localhost`.
 
 ## Troubleshooting
 

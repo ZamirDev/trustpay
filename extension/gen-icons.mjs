@@ -1,4 +1,4 @@
-// gen-icons.mjs — deterministic clay-style PNG icons (16/48/128), no deps.
+// gen-icons.mjs — deterministic Night-style PNG icons (16/48/128), no deps.
 // Painter's-algorithm pixel shader over a 0..31 logical grid, scaled up,
 // encoded to real PNGs via zlib. Run: node gen-icons.mjs
 
@@ -10,47 +10,32 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const OUT = join(ROOT, 'icons');
 
-const INK = [61, 44, 46];
-const PAPER = [254, 251, 244];
-const AMBER = [245, 200, 107];
-const GREEN = [159, 230, 160];
+const BLACK = [0, 0, 0];
+const WHITE = [255, 255, 255];
+const GRAY = [141, 141, 141];
+const COGNAC = [3, 149, 91];
 const RGBA = (c, a = 255) => [...c, a];
 
-function rr(x, cx, cy, r) {
-  const dx = x[0] - cx;
-  const dy = x[1] - cy;
-  return Math.sqrt(dx * dx + dy * dy) <= r;
-}
-
-function inRoundRect(x, x0, y0, x1, y1, r) {
-  const minX = Math.max(x[0], x0 + r);
-  const maxX = Math.min(x[0], x1 - r);
-  const minY = Math.max(x[1], y0 + r);
-  const maxY = Math.min(x[1], y1 - r);
-  if (minX <= maxX && minY <= maxY) return true;
-  // corner circles
-  for (const cx of [x0 + r, x1 - r]) {
-    for (const cy of [y0 + r, y1 - r]) {
-      if (rr(x, cx, cy, r)) return true;
-    }
-  }
-  return false;
+function inRect(x, x0, y0, x1, y1) {
+  return x[0] >= x0 && x[0] <= x1 && x[1] >= y0 && x[1] <= y1;
 }
 
 function shade(x, y) {
   const p = [x, y];
-  const card = [5.5, 6.5, 25.5, 26.5];
-  const r = 7;
-  // backdrop
-  if (!inRoundRect(p, card[0], card[1], card[2], card[3], r)) return RGBA(INK);
-  // amber header band
-  if (inRoundRect(p, card[0] - 2, card[1] - 2, card[2], card[1] + 5.5, 6)) return RGBA(AMBER);
-  // body paper
-  if (y > card[1] + 5.5) return RGBA(PAPER);
-  // shield (green scored circle with ink ring)
-  const d = Math.sqrt((x - 15.5) ** 2 + (y - 18.5) ** 2);
-  if (d <= 6) return RGBA(GREEN);
-  return RGBA(PAPER);
+  // black backdrop + outlined card
+  if (!inRect(p, 5.5, 6.5, 25.5, 26.5)) return RGBA(BLACK);
+  // white card border
+  const f = [7.5, 8.5, 23.5, 24.5];
+  const outer = inRect(p, f[0] - 1, f[1] - 1, f[2] + 1, f[3] + 1);
+  const inner = inRect(p, f[0] + 1, f[1] + 1, f[2] - 1, f[3] - 1);
+  if (outer && !inner) return RGBA(WHITE);
+  // gray inner hairline frame
+  if (inRect(p, f[0], f[1], f[2], f[3]) && !inRect(p, f[0] + 0.5, f[1] + 0.5, f[2] - 0.5, f[3] - 0.5)) return RGBA(GRAY);
+  // white band (mag stripe)
+  if (inRect(p, 8, 13.5, 23, 16)) return RGBA(WHITE);
+  // cognac stamp square (the only color)
+  if (inRect(p, 18.5, 19.5, 22.5, 23)) return RGBA(COGNAC);
+  return RGBA(BLACK);
 }
 
 function raster(logical) {

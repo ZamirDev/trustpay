@@ -1,0 +1,1 @@
+{ "name": "trustpay-tests", "private": true, "type": "module", "scripts": { "test": "node page-scan.test.mjs" }, "devDependencies": { "jsdom": "^29.0.0" } }

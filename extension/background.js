@@ -50,8 +50,13 @@ async function api(path, body) {
 async function setBadge(score) {
   const text = score != null ? String(Math.max(0, Math.min(100, Math.round(score)))) : '🛡';
   await chrome.action.setBadgeText({ text });
-  const color = score >= 65 ? '#b3261e' : score >= 35 ? '#e0a32e' : '#2e7d32';
+  const color = score >= 65 ? '#ffffff' : score >= 35 ? '#ba6a36' : '#03955b';
   await chrome.action.setBadgeBackgroundColor({ color });
+  if (score >= 65 && chrome.action.setBadgeTextColor) {
+    await chrome.action.setBadgeTextColor({ color: '#000000' });
+  } else if (chrome.action.setBadgeTextColor) {
+    await chrome.action.setBadgeTextColor({ color: '#ffffff' });
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -121,8 +126,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         });
         sendResponse({ ok: true });
       } else if (msg.type === 'pagescan') {
-        // "Is this payment page safe?" — inject the trust scanner, collect its
-        // synchronous report, and auto-attach the block-guard on a red verdict.
+        // "Is this page safe?" — inject the trust scanner, collect its
+        // synchronous report, and auto-attach the block-guard on a red verdict
+        // (payment OR login/signup page).
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab) return sendResponse({ ok: false, error: 'no active tab' });
         try {
@@ -141,8 +147,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             await new Promise((r) => setTimeout(r, 250));
           }
           if (!scan) return sendResponse({ ok: false, error: 'scan did not return a report' });
-          await chrome.storage.local.set({ tpLastPageScan: { ...scan, tabId: tab.id } });
-          if (scan.isPaymentPage && scan.action === 'challenge') {
+          await chrome.storage.local.set({ tpLastPageScan: { ...scan, tabId: tab.id, ts: Date.now() } });
+          const scoredKind = scan.pageKind === 'payment' || scan.pageKind === 'login' || scan.pageKind === 'signup';
+          if (scoredKind && scan.action === 'challenge') {
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               files: ['guardInPage.js'],
@@ -152,6 +159,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         } catch (e) {
           sendResponse({ ok: false, error: e.message });
         }
+      } else if (msg.type === 'tpScanUpdate') {
+        // live watch-mode update from pageScan.js (a payment/login modal that
+        // opened AFTER the user's scan): refresh the stored page scan and
+        // auto-attach the guard if the late verdict is red.
+        const rep = msg.report || {};
+        const tabId = _sender.tab ? _sender.tab.id : null;
+        await chrome.storage.local.set({ tpLastPageScan: { ...rep, tabId, ts: Date.now() } });
+        const lateKind = rep.pageKind === 'payment' || rep.pageKind === 'login' || rep.pageKind === 'signup';
+        if (lateKind && rep.action === 'challenge' && tabId != null) {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ['guardInPage.js'],
+          }).catch(() => {});
+        }
+        sendResponse({ ok: true });
       } else if (msg.type === 'clearBadge') {
         await setBadge(null);
         sendResponse({ ok: true });

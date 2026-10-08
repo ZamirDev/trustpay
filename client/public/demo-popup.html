@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <!-- A SIMULATED subscription page whose payment UI opens as a dark overlay
+       modal (the EaseCheckout pattern used by nexttopeer + most Indian SaaS
+       sites). The modal embeds a same-origin iframe (demo-easebuzz-frame.html)
+       that pretends to be pay.easebuzz.in.
+       Expected scanner verdicts:
+         before Subscribe → pageKind 'none' (nothing to scan; watch mode armed)
+         after  Subscribe  → payment / 0 / allow, hostedBy 'Easebuzz'
+       (cards live inside the readable iframe; the form posts to a known
+       processor so cross_origin_post is a note, not a factor; footer trust
+       links keep no_trust quiet; title/headings never claim 'Easebuzz'). -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NextPeer Pro — Upgrade your plan</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: #f6f3ec; color: #2b2b33;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      .demoflag {
+        background: #1d1d26; color: #ffd9a0; text-align: center; font-size: 11.5px; font-weight: 700;
+        padding: 6px 10px; letter-spacing: 0.4px;
+      }
+      header.storebar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 24px; background: #fff; border-bottom: 2px solid #e5e0d6;
+      }
+      .logo { font-weight: 800; font-size: 18px; }
+      .logo span { color: #2e7d32; }
+      .nav { font-size: 13px; color: #8a8a93; }
+      main { max-width: 720px; margin: 0 auto; padding: 34px 24px; }
+      h1 { margin: 0 0 6px; font-size: 26px; }
+      .sub { font-size: 14px; color: #8a8a93; margin-bottom: 22px; }
+      .plans { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      @media (max-width: 620px) { .plans { grid-template-columns: 1fr; } }
+      .plan { background: #fff; border: 2px solid #e5e0d6; border-radius: 14px; padding: 18px; }
+      .plan.pro { border-color: #2b2b33; box-shadow: 0 0 0 3px #ffd9a0; }
+      .plan h3 { margin: 0 0 4px; font-size: 16px; }
+      .price { font-size: 26px; font-weight: 800; }
+      .price small { font-size: 13px; font-weight: 600; color: #8a8a93; }
+      .plan ul { padding-left: 18px; margin: 12px 0 16px; font-size: 13.5px; color: #4a4a52; }
+      .plan li { margin-bottom: 5px; }
+      button.sub-btn {
+        width: 100%; border: 2px solid #2b2b33; border-radius: 999px; padding: 11px 16px;
+        font: inherit; font-weight: 700; cursor: pointer; background: #2b2b33; color: #fff;
+      }
+      button.sub-btn:hover { filter: brightness(1.25); }
+      .note { font-size: 11.5px; color: #8a8a93; margin-top: 10px; text-align: center; }
+      footer.trust { text-align: center; padding: 16px; font-size: 12px; color: #8a8a93; }
+      footer.trust a { color: #2e7d32; text-decoration: none; font-weight: 700; margin: 0 10px; }
+
+      /* dark-overlay payment modal — built by JS only when Subscribe is clicked,
+         so the page scans as "nothing" until the popup actually opens */
+      .pay-overlay {
+        position: fixed; inset: 0; background: rgba(20, 20, 26, 0.72);
+        display: flex; align-items: center; justify-content: center; z-index: 100;
+      }
+      .pay-dialog {
+        width: min(440px, 94vw); background: #fff; border: 2px solid #2b2b33;
+        border-radius: 14px; overflow: hidden;
+      }
+      .pay-dialog .bar {
+        display: flex; align-items: center; justify-content: space-between;
+        background: #f26f21; color: #fff; padding: 10px 14px; font-weight: 800; font-size: 14px;
+      }
+      .pay-dialog .bar .sim { font-size: 10px; font-weight: 700; background: rgba(0,0,0,.28); padding: 3px 7px; border-radius: 999px; }
+      .pay-dialog .bar button { border: 0; background: transparent; color: #fff; font-size: 18px; cursor: pointer; }
+      .pay-dialog iframe { display: block; width: 100%; height: 340px; border: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="demoflag">⚠ SIMULATED SUBSCRIPTION PAGE — DEMO ONLY — the payment popup is a local fake of an Easebuzz checkout</div>
+
+    <header class="storebar">
+      <div class="logo">Next<span>Peer</span></div>
+      <div class="nav">Projects · Pricing · Docs</div>
+    </header>
+
+    <main>
+      <h1>Upgrade to NextPeer Pro</h1>
+      <div class="sub">Team collaboration for study groups. Cancel anytime.</div>
+
+      <div class="plans">
+        <div class="plan">
+          <h3>Free</h3>
+          <div class="price">₹0 <small>/ month</small></div>
+          <ul>
+            <li>3 projects</li>
+            <li>1 GB storage</li>
+            <li>Community support</li>
+          </ul>
+          <button class="sub-btn" style="background:#f2f0ea;color:#2b2b33" disabled>Current plan</button>
+        </div>
+        <div class="plan pro">
+          <h3>Pro</h3>
+          <div class="price">₹499 <small>/ month</small></div>
+          <ul>
+            <li>Unlimited projects</li>
+            <li>100 GB storage</li>
+            <li>Priority support</li>
+          </ul>
+          <button class="sub-btn" id="subBtn">Subscribe with Easebuzz</button>
+          <div class="note">Payments are processed by the gateway in a secure popup.</div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="trust">
+      <a href="#">Privacy Policy</a><a href="#">Terms of Service</a><a href="#">Help Center</a>
+    </footer>
+
+    <script>
+      // Open the payment popup — overlay div + gateway iframe are created NOW,
+      // so a TrustPay scan that is already watching picks the mutation up live.
+      document.getElementById('subBtn').addEventListener('click', () => {
+        if (document.getElementById('payOverlay')) return;
+        const overlay = document.createElement('div');
+        overlay.className = 'pay-overlay';
+        overlay.id = 'payOverlay';
+        overlay.innerHTML = `
+          <div class="pay-dialog" role="dialog" aria-label="Payment">
+            <div class="bar">
+              <span>Secure Checkout · ₹499</span>
+              <span class="sim">SIMULATED</span>
+              <button id="payClose" aria-label="Close">×</button>
+            </div>
+            <iframe id="gwFrame" src="./demo-easebuzz-frame.html" title="Payment"></iframe>
+          </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#payClose').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      });
+    </script>
+  </body>
+</html>

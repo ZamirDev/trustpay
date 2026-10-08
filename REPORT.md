@@ -43,25 +43,27 @@ one-line plain-English explanation — shown to the customer on the page *before
 - **review** (35–64) → we look closer, no friction for the buyer.
 - **challenge** (≥ 65) → the submit is blocked and MFA is required before a charge.
 
-**Half 2 — the Guard extension ("is this payment page safe?").** A Chrome MV3 extension that
-protects *any* checkout page, even one it's never met:
+**Half 2 — the Guard extension ("is this page safe?").** A Chrome MV3 extension that
+protects *any* checkout **or sign-in page**, even one it's never met:
 
 - attaches a behavioral guard to checkout forms on any site,
 - blocks the submit **before the card leaves the browser** when the score is critical,
 - and, on demand, scans the current page for trust: does the form POST cross-origin? Is the
-  domain a typosquat of a known brand? Is the page collecting sensitive extras (ATM PIN, OTP,
-  SSN) next to a card? Does it embed a real payment processor (Stripe/PayPal/...) iframe?
-  Verdict renders as an on-page banner + popup card, and a red verdict auto-attaches the
-  block-guard.
+  domain a typosquat of a known brand, or does the page claim to be Google while hosted
+  somewhere else? Is the page collecting sensitive extras (ATM PIN, OTP, SSN) next to a card,
+  or a date of birth next to a password? Does it embed a real payment processor
+  (Stripe/PayPal/...) iframe? Verdict renders as an on-page banner + popup card, and a red
+  verdict auto-attaches the block-guard — payments get an MFA step-up, phishing logins get a
+  *Leave this page / Continue anyway* warning (the site itself is the suspect, not the user).
 
 ## 3. How explainability is the product
 
 The risk widget shows live:
 
 ```
-68  Likely risky — identity check needed
-    +35 symte.com posts to evil.example.net, not symte.com
-    +25 Form also asks for "ATM PIN" — never alongside a card
+70  Likely risky — identity check needed
+    +35 Card form submits to evil.example.net, not its own domain
+    +30 Form also asks for "ATM PIN" — never ask alongside a card
     +5  No privacy / terms / help links found
 ```
 

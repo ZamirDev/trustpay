@@ -1,23 +1,32 @@
-// pageScan.js — TrustPay "Is this payment page safe?" trust scan.
+// pageScan.js — TrustPay "Is this page safe?" trust scan.
 // Injected into the ACTIVE tab on demand. Computes an explainable PageTrust
 // score from what the page exposes (TLS, form targets, requested fields,
-// domain lookalikes, embedded payment iframes), renders an on-page banner,
-// and publishes the report to globalThis for the background to collect.
+// domain lookalikes, embedded payment iframes, credential-form phishing
+// signals), renders an on-page banner, and publishes the report to
+// globalThis for the background to collect.
 //
-// Hardened: never crashes on unusual DOMs (card fields outside a <form>,
-// null form, etc.) — any error becomes a readable report, not a silent timeout.
+// Page kinds: 'payment' (card form) · 'login'/'signup' (password form) ·
+// 'none'. Hardened: never crashes on unusual DOMs — any error becomes a
+// readable report, not a silent timeout.
 
 (() => {
   const BRANDS = [
     'amazon', 'paypal', 'visa', 'mastercard', 'amex', 'americanexpress',
     'stripe', 'razorpay', 'flipkart', 'myntra', 'gpay', 'applepay',
     'netflix', 'ebay', 'swiggy', 'zomato', 'paytm', 'phonepe',
+    'easebuzz', 'cashfree',
+    // credential brands — login/sign-up phishing targets
+    'google', 'gmail', 'facebook', 'instagram', 'whatsapp', 'telegram',
+    'linkedin', 'github', 'microsoft', 'outlook', 'yahoo', 'twitter', 'snapchat',
   ];
   const PAYMENT_HOSTS = [
     'stripe.com', 'js.stripe.com', 'link.stripe.com', 'checkout.stripe.com',
     'paypal.com', 'paypalobjects.com', 'braintreegateway.com', 'braintreepayments.com',
     'adyen.com', 'adyenpayments.com', 'squareup.com', 'razorpay.com', 'checkout.com',
     'cybersource.com', '2checkout.com', 'payments.worldline.com', 'amazonpay.com',
+    // Indian gateways (EaseCheckout-style iframe modals are common here)
+    'easebuzz.in', 'cashfree.com', 'payu.in', 'payu.com',
+    'ccavenue.com', 'billdesk.com', 'instamojo.com',
   ];
   const PROCESSOR_NAMES = {
     'stripe.com': 'Stripe', 'js.stripe.com': 'Stripe', 'link.stripe.com': 'Stripe', 'checkout.stripe.com': 'Stripe',
@@ -26,30 +35,76 @@
     'adyen.com': 'Adyen', 'adyenpayments.com': 'Adyen', 'squareup.com': 'Square',
     'razorpay.com': 'Razorpay', 'checkout.com': 'Checkout.com', 'cybersource.com': 'Cybersource',
     '2checkout.com': '2Checkout', 'payments.worldline.com': 'Worldline', 'amazonpay.com': 'Amazon Pay',
+    'easebuzz.in': 'Easebuzz', 'cashfree.com': 'Cashfree',
+    'payu.in': 'PayU', 'payu.com': 'PayU',
+    'ccavenue.com': 'CCAvenue', 'billdesk.com': 'BillDesk', 'instamojo.com': 'Instamojo',
   };
+  // src-path tokens: an embedded checkout frame whose HOST is ours (or is a
+  // relative sim page) still counts if its URL carries the processor's name.
+  const PROCESSOR_TOKENS = [
+    ['easebuzz', 'Easebuzz'], ['cashfree', 'Cashfree'], ['payu', 'PayU'],
+    ['ccavenue', 'CCAvenue'], ['billdesk', 'BillDesk'], ['instamojo', 'Instamojo'],
+    ['stripe', 'Stripe'], ['paypal', 'PayPal'], ['braintree', 'Braintree'],
+    ['adyen', 'Adyen'], ['razorpay', 'Razorpay'],
+    ['cybersource', 'Cybersource'], ['worldline', 'Worldline'], ['amazonpay', 'Amazon Pay'],
+  ];
   const HOMOGLYPHS = { o: '0', 0: 'o', l: '1', i: '1', 1: 'l', s: '5', 5: 's', a: '4', e: '3', t: '7', g: '9' };
   const TRUST_WORDS = /(privacy|terms|secure|help|contact|faq|customer\s*care)/i;
   const OVERREACH =
     /\b(atm\s*pin|pin\s*(number|code)|social\s*security|ssn|bank\s*password|account\s*password|mobile\s*password|otp|one[- ]?time\s*(password|code|pin)|mother'?s?\s*maiden|date\s*of\s*birth|card\s*password|card\s*pin)\b/i;
+  // a sign-in form legitimately asks for a password (and often an OTP) — only
+  // flag things a login must never ask for.
+  const LOGIN_OVERREACH =
+    /\b(atm\s*pin|social\s*security|ssn|mother'?s?\s*maiden|date\s*of\s*birth|card\s*(pin|password|number)|credit\s*card|bank\s*account\s*number|cvv|cvc)\b/i;
+  const SIGNUP_HINTS = /\b(sign\s*up|create\s*(an?\s*)?account|register|join\s*(now|today))\b/i;
 
   const safeHost = (h) => h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
 
   // ---------- detection ----------
+  // Readable scopes: the top document plus any same-origin iframe documents.
+  // Cross-origin frames throw on access and are skipped (their src is handled
+  // by paymentIframes() instead).
+  function frameDocs() {
+    const out = [document];
+    for (const f of document.querySelectorAll('iframe')) {
+      try {
+        const d = f.contentDocument;
+        if (d && d.body) out.push(d);
+      } catch { /* cross-origin */ }
+    }
+    return out;
+  }
+
   function cardInputs() {
-    return [...document.querySelectorAll(
-      'input[autocomplete="cc-number"], input[data-card], input[name*="card" i], input[id*="cardnumber" i], ' +
-      'input[placeholder*="card" i], input[placeholder*="1234" i], input[data-element*="card" i], ' +
-      'input[inputmode="numeric"][maxlength="19"]'
-    )].filter((i) => i.type !== 'hidden');
+    const out = [];
+    for (const doc of frameDocs()) {
+      try {
+        out.push(...[...doc.querySelectorAll(
+          'input[autocomplete="cc-number"], input[data-card], input[name*="card" i], input[id*="cardnumber" i], ' +
+          'input[placeholder*="card" i], input[placeholder*="1234" i], input[data-element*="card" i], ' +
+          'input[inputmode="numeric"][maxlength="19"]'
+        )].filter((i) => i.type !== 'hidden'));
+      } catch { /* unreadable frame */ }
+    }
+    return out;
   }
 
   function paymentIframes() {
     const out = [];
     for (const f of document.querySelectorAll('iframe[src]')) {
-      let h = '';
-      try { h = new URL(f.src, location.href).hostname.toLowerCase(); } catch { continue; }
+      let u;
+      try { u = new URL(f.src, location.href); } catch { continue; }
+      const h = u.hostname.toLowerCase();
       const match = PAYMENT_HOSTS.find((p) => h === p || h.endsWith('.' + p));
-      if (match) out.push({ host: h, processor: PROCESSOR_NAMES[match] || match });
+      if (match) {
+        out.push({ host: h, processor: PROCESSOR_NAMES[match] || match });
+        continue;
+      }
+      // same-origin / path-based match: the frame URL carries a processor name
+      // (e.g. an EaseCheckout-style modal embedding ./demo-easebuzz-frame.html)
+      const path = (u.hostname + u.pathname).toLowerCase();
+      const tok = PROCESSOR_TOKENS.find(([t]) => path.includes(t));
+      if (tok) out.push({ host: h, processor: tok[1] });
     }
     return out;
   }
@@ -59,6 +114,37 @@
     if (!cards.length) return null;
     const form = cards[0].closest('form') || null;
     return { form, card: cards[0], inForm: !!form };
+  }
+
+  // ---------- credential (login / sign-up) detection ----------
+  function passwordInputs() {
+    return [...document.querySelectorAll('input[type="password"]')].filter((i) => i.type !== 'hidden');
+  }
+
+  function userInput(scope) {
+    try {
+      return scope.querySelector(
+        'input[type="email"], input[autocomplete="username"], input[autocomplete="email"], ' +
+        'input[name*="email" i], input[name*="user" i], input[name*="login" i], input[name*="phone" i]'
+      );
+    } catch { return null; }
+  }
+
+  function credentialForm() {
+    const pws = passwordInputs();
+    if (!pws.length) return null;
+    const form = pws[0].closest('form') || null;
+    const scope = form || document;
+    return { form, pw: pws[0], user: userInput(scope), inForm: !!form, pws: pws.length };
+  }
+
+  // brand named in the page's own title/headings (what the page CLAIMS to be)
+  function claimedBrands() {
+    const hay = String(document.title || '') + ' ' +
+      [...document.querySelectorAll('h1, h2')].slice(0, 4).map((h) => h.textContent || '').join(' ');
+    const out = [];
+    for (const b of BRANDS) if (new RegExp(`\\b${b}\\b`, 'i').test(hay)) out.push(b);
+    return out;
   }
 
   // ---------- string helpers ----------
@@ -113,7 +199,7 @@
     }
   }
 
-  function findOverreach(scope) {
+  function findOverreach(scope, re) {
     const hay = [];
     try {
       scope.querySelectorAll('label').forEach((l) => hay.push(l.textContent || ''));
@@ -122,7 +208,7 @@
       });
     } catch { /* scope may be document or a form — both expose querySelectorAll */ }
     const scanned = hay.join(' ') + ' ' + String(scope.textContent || '').slice(0, 4000);
-    const m = scanned.match(OVERREACH);
+    const m = scanned.match(re || OVERREACH);
     return m ? m[0].trim() : null;
   }
 
@@ -132,7 +218,7 @@
     );
   }
 
-  // ---------- scan ----------
+  // ---------- scan: payment pages ----------
   function runScan() {
     const host = location.hostname;
     const isLocal = safeHost(host);
@@ -151,7 +237,9 @@
     const notes = [];
 
     if (!isPayment) {
-      return makeReport({ isPaymentPage: false, score: 0, action: 'none' });
+      const cred = credentialForm();
+      if (!cred) return makeReport({ isPaymentPage: false, pageKind: 'none', score: 0, action: 'none' });
+      return runLoginScan(cred, host, isLocal, isHttps);
     }
 
     // 1. transport security
@@ -175,7 +263,10 @@
 
     // 4. where does the page POST?
     const tf = inForm ? formTarget(form) : { same: true, host, url: 'no <form>' };
-    if (!tf.same) {
+    const toProcessor = !tf.same ? PAYMENT_HOSTS.find((p) => tf.host === p || tf.host.endsWith('.' + p)) : null;
+    if (toProcessor) {
+      notes.push(`✓ Card form posts to ${PROCESSOR_NAMES[toProcessor] || tf.host} — a known payment processor`);
+    } else if (!tf.same) {
       factors.push({ id: 'cross_origin_post', label: `Card form submits to ${tf.host}, not ${host}`, impact: 35 });
     } else if (inForm && tf.url !== 'same page' && tf.url !== 'no <form>') {
       notes.push(`✓ Card posts to the same domain (${tf.host})`);
@@ -206,6 +297,7 @@
 
     return makeReport({
       isPaymentPage: true,
+      pageKind: 'payment',
       score,
       action,
       factors: factors.sort((a, b) => b.impact - a.impact),
@@ -216,11 +308,88 @@
     });
   }
 
+  // ---------- scan: login / sign-up pages ----------
+  function runLoginScan(cred, host, isLocal, isHttps) {
+    const form = cred.form;
+    const inForm = cred.inForm;
+    const scope = form || document;
+    const title = document.title + ' ' + ((document.querySelector('h1, h2') || {}).textContent || '');
+    const isSignup = SIGNUP_HINTS.test(title) || (form && (form.querySelector('input[type="password"][autocomplete="new-password"]') ||
+      [...form.querySelectorAll('input[type="password"]')].length >= 2));
+
+    const factors = [];
+    const notes = [];
+
+    // 1. transport security — a login over HTTP hands the password over
+    if (!isHttps && !isLocal) factors.push({ id: 'not_https', label: 'Page is not encrypted (no HTTPS)', impact: 25 });
+    else notes.push(isHttps ? '✓ HTTPS encrypted connection' : '✓ Dev/localhost page — TLS check skipped');
+
+    // 2. where does the password go?
+    const tf = inForm ? formTarget(form) : { same: true, host, url: 'no <form>' };
+    if (!tf.same) {
+      factors.push({ id: 'cross_origin_post', label: `Form submits to ${tf.host}, not ${host}`, impact: 35 });
+    } else if (inForm && tf.url !== 'same page' && tf.url !== 'no <form>') {
+      notes.push(`✓ Credentials post to the same domain (${tf.host})`);
+    }
+
+    // 3. host weirdness
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) factors.push({ id: 'ip_host', label: `Host is a raw IP (${host})`, impact: 20 });
+    const port = location.port;
+    if (port && port !== '80' && port !== '443' && !isLocal) factors.push({ id: 'odd_port', label: `Unusual port :${port}`, impact: 15 });
+
+    // 4. domain trust: typosquat, then brand spoof (page claims X, host isn't X)
+    const sq = typosquat(host);
+    let spoofed = null;
+    if (sq) {
+      if (sq.exact) notes.push(`✓ Domain confirmed as ${sq.match}`);
+      else factors.push({ id: 'typosquat', label: `Domain looks like ${sq.match} (lookalike)`, impact: 45 });
+    } else {
+      const claimed = claimedBrands();
+      if (claimed.length) {
+        spoofed = claimed[0];
+        factors.push({
+          id: 'brand_spoof',
+          label: `Page claims to be ${claimed[0]}, but ${host} is not a ${claimed[0]} domain`,
+          impact: 40,
+        });
+      }
+    }
+    if (!sq && !spoofed) notes.push('✓ Host does not impersonate a known brand');
+
+    // 5. overreach — things a sign-in must never ask for
+    const over = findOverreach(scope, LOGIN_OVERREACH);
+    if (over) factors.push({ id: 'overreach', label: `Form also asks for “${over}” — a login never needs this`, impact: 30 });
+
+    // 6. human trust signals
+    if (![...document.querySelectorAll('a[href]')].some((a) => TRUST_WORDS.test(a.textContent || ''))) {
+      factors.push({ id: 'no_trust', label: 'No privacy / terms / help links found', impact: 5 });
+    }
+
+    notes.push(isSignup ? '✓ Sign-up form detected' : '✓ Login form detected');
+
+    const score = Math.min(100, factors.reduce((s, f) => s + f.impact, 0));
+    const action = score >= 65 ? 'challenge' : score >= 35 ? 'review' : 'allow';
+
+    return makeReport({
+      isPaymentPage: false,
+      pageKind: isSignup ? 'signup' : 'login',
+      score,
+      action,
+      factors: factors.sort((a, b) => b.impact - a.impact),
+      notes,
+      domain: host,
+      hasPay: false,
+    });
+  }
+
   function makeReport(r) {
+    const kind = r.pageKind || (r.isPaymentPage ? 'payment' : 'none');
+    const scored = kind === 'payment' || kind === 'login' || kind === 'signup';
     return {
       isPaymentPage: !!r.isPaymentPage,
+      pageKind: kind,
       score: r.score,
-      action: r.isPaymentPage ? r.action : 'none',
+      action: scored ? r.action : 'none',
       factors: r.factors || [],
       notes: r.notes || [],
       domain: location.hostname,
@@ -239,90 +408,203 @@
       style.id = 'tp-scan-style';
       style.textContent = `
         #tp-scan-banner{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:2147483000;
-          max-width:min(520px,94vw);background:#fefbf4;color:#3d2c2e;border:3px solid #3d2c2e;border-radius:14px;
-          box-shadow:0 10px 0 rgba(61,44,46,.18);font-family:system-ui,'Segoe UI',sans-serif;font-size:13px}
+          max-width:min(520px,94vw);background:#000;color:#fff;border:2px solid #fff;border-radius:0;
+          box-shadow:none;font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:13px}
+        #tp-scan-banner::before{content:'';display:block;height:1px;background:#8d8d8d}
         #tp-scan-banner .tb-in{padding:12px 14px}
         #tp-scan-banner .tb-top{display:flex;align-items:center;gap:10px}
         #tp-scan-banner .tb-ball{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-          font-weight:800;color:#fff;border:2px solid #3d2c2e;flex-shrink:0}
-        #tp-scan-banner .tb-lead{font-weight:800;text-transform:uppercase;letter-spacing:.4px;font-size:13px}
-        #tp-scan-banner .tb-host{font-size:11px;color:rgba(61,44,46,.6);word-break:break-all}
-        #tp-scan-banner .tb-x{margin-left:auto;border:2px solid #3d2c2e;background:#f7efe1;border-radius:999px;width:24px;height:24px;
-          font-weight:700;cursor:pointer;line-height:1}
+          font-weight:400;color:#fff;border:2px solid #fff;flex-shrink:0;background:#000;
+          box-shadow:none}
+        #tp-scan-banner .tb-lead{font-weight:400;text-transform:uppercase;letter-spacing:1px;font-size:14px;
+          font-family:Georgia,'Times New Roman',serif;color:#cecece}
+        #tp-scan-banner .tb-host{font-size:10px;color:#8d8d8d;word-break:break-all;text-transform:uppercase;letter-spacing:1px}
+        #tp-scan-banner .tb-x{margin-left:auto;border:1px solid #8d8d8d;background:transparent;color:#fff;border-radius:0;width:24px;height:24px;
+          font-weight:400;cursor:pointer;line-height:1}
+        #tp-scan-banner .tb-x:hover{background:#fff;color:#000}
         #tp-scan-banner .tb-factors{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
-        #tp-scan-banner .tb-factors li{display:flex;justify-content:space-between;gap:8px;background:#f7efe1;border:2px solid #e6d9c3;
-          border-radius:8px;padding:5px 8px;font-weight:600}
-        #tp-scan-banner .tb-factors .impact{color:#b3261e;font-weight:800;white-space:nowrap}
-        #tp-scan-banner .tb-feet{margin:8px 0 0;padding-left:18px;font-weight:600;display:grid;gap:2px;color:rgba(61,44,46,.75)}
-        #tp-scan-banner .tb-cta{margin-top:10px;font-weight:800}
-        #tp-scan-banner.tb-allow .tb-ball{background:#2e7d32}
-        #tp-scan-banner.tb-allow .tb-lead{color:#2e7d32}
-        #tp-scan-banner.tb-review .tb-ball{background:#e0a32e}
-        #tp-scan-banner.tb-review .tb-lead{color:#8a6d1f}
-        #tp-scan-banner.tb-challenge .tb-ball{background:#b3261e}
-        #tp-scan-banner.tb-challenge .tb-lead{color:#b3261e}
-        #tp-scan-banner.tb-error .tb-ball{background:#3d2c2e}
-        #tp-scan-banner.tb-error .tb-lead{color:#b3261e}`;
+        #tp-scan-banner .tb-factors li{display:flex;justify-content:space-between;gap:8px;background:#0a0a0a;border:1px solid #484848;
+          border-left:3px solid #8d8d8d;border-radius:0;padding:5px 8px;font-weight:400;font-size:12px}
+        #tp-scan-banner .tb-factors .impact{color:#cecece;font-weight:400;white-space:nowrap}
+        #tp-scan-banner .tb-feet{margin:8px 0 0;padding-left:18px;font-weight:400;display:grid;gap:3px;color:#8d8d8d;font-size:12px}
+        #tp-scan-banner .tb-cta{margin-top:10px;font-weight:400;text-transform:uppercase;letter-spacing:1.5px;font-size:12px}
+        #tp-scan-banner.tb-allow .tb-ball{background:#03955b;border-color:#03955b}
+        #tp-scan-banner.tb-allow .tb-lead{color:#0ec37a}
+        #tp-scan-banner.tb-review .tb-ball{background:#ba6a36;border-color:#ba6a36}
+        #tp-scan-banner.tb-review .tb-lead{color:#d98a4f}
+        #tp-scan-banner.tb-challenge .tb-ball{background:#000;border-color:#fff;color:#fff}
+        #tp-scan-banner.tb-challenge .tb-lead{color:#fff}
+        #tp-scan-banner.tb-error .tb-ball{background:#141414;border-color:#8d8d8d}
+        #tp-scan-banner.tb-error .tb-lead{color:#d98a4f}
+        #tp-scan-banner .tb-watch{margin-top:8px;padding-top:7px;border-top:1px solid #484848;color:#8d8d8d;font-size:11px;
+          text-transform:uppercase;letter-spacing:1px}`;
       (document.head || document.documentElement).appendChild(style);
     }
     const el = document.createElement('div');
     el.id = 'tp-scan-banner';
     el.className = 'tb-' + (r.action === 'error' ? 'error' : r.action);
+    const isLogin = r.pageKind === 'login' || r.pageKind === 'signup';
+    const scored = r.pageKind === 'payment' || isLogin;
     const lead = r.fatal
       ? 'Scan error — retry'
-      : r.isPaymentPage
+      : isLogin
+        ? r.action === 'allow' ? 'Login looks safe ✓'
+        : r.action === 'review' ? 'Be cautious · check this login'
+        : 'Likely phishing — don\u2019t enter your password'
+        : r.pageKind === 'payment'
         ? r.action === 'allow' ? 'Looks safe ✓'
         : r.action === 'review' ? 'Be cautious · check before paying'
         : 'Likely fake — don\u2019t enter your card'
-        : 'No card form on this page';
+        : 'No login or card form on this page';
+    const kindLine = r.pageKind === 'payment' ? ' · payment form detected'
+      : isLogin ? ` · ${r.pageKind} form detected` : '';
     el.innerHTML = `
       <div class="tb-in">
         <div class="tb-top">
-          <div class="tb-ball">${r.fatal ? '!' : r.isPaymentPage ? r.score : '—'}</div>
+          <div class="tb-ball">${r.fatal ? '!' : scored ? r.score : '—'}</div>
           <div>
             <div class="tb-lead">${lead}</div>
-            <div class="tb-host">${r.domain}${r.isPaymentPage ? ' · payment form detected' : ''}</div>
+            <div class="tb-host">${r.domain}${kindLine}</div>
           </div>
           <button class="tb-x" aria-label="Dismiss">×</button>
         </div>
         ${r.fatal
           ? `<p class="tb-feet">${r.error || 'Something went wrong while scanning.'}</p>`
-          : r.isPaymentPage && r.factors.length
+          : scored && r.factors.length
             ? `<ul class="tb-factors">${r.factors
                 .map((f) => `<li><span>${f.label}</span><span class="impact">+${f.impact}</span></li>`)
                 .join('')}</ul>`
             : ''}
-        ${r.isPaymentPage && r.notes.length
+        ${scored && r.notes.length
           ? `<div class="tb-feet">${r.notes.map((n) => `<div>${n}</div>`).join('')}</div>`
           : ''}
-        ${r.isPaymentPage && r.action === 'challenge'
-          ? `<div class="tb-cta">🔒 Guard attached — this form is blocked from sending your card.</div>`
+        ${scored && r.action === 'challenge'
+          ? `<div class="tb-cta">${isLogin
+              ? '🔒 Guard attached — this form is blocked from sending your password.'
+              : '🔒 Guard attached — this form is blocked from sending your card.'}</div>`
+          : ''}
+        ${globalThis.__tpPageScanWatch
+          ? '<div class="tb-watch" id="tp-watch-line">◉ watching for payment popups…</div>'
           : ''}
       </div>`;
-    el.querySelector('.tb-x').addEventListener('click', () => el.remove());
+    el.querySelector('.tb-x').addEventListener('click', () => {
+      el.remove();
+      globalThis.__tpPageScanWatch?.stop();
+    });
     document.body.appendChild(el);
   }
 
-  // -- run once per injection; NEVER allow a raw exception to sink the report --
-  let r;
-  try {
-    r = runScan();
-  } catch (e) {
-    r = {
-      isPaymentPage: false,
-      score: 0,
-      action: 'error',
-      factors: [],
-      notes: [],
-      domain: location.hostname,
-      url: location.href,
-      hasPay: false,
-      hostedBy: null,
-      nonPayment: false,
-      fatal: true,
-      error: String((e && e.message) || e),
-    };
+  // ---------- watch mode ----------
+  // After a scan, keep watching the DOM for 60s so a payment modal that opens
+  // LATER (EaseCheckout-style overlay, fake gateway dialog) is caught live:
+  // debounced re-scan → refresh banner + report → notify the background.
+  const WATCH_MS = 60000;
+  const WATCH_DEBOUNCE_MS = 300;
+
+  function notifyBackground(rep) {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        const p = chrome.runtime.sendMessage({ type: 'tpScanUpdate', report: rep });
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch { /* no extension context (tests) */ }
   }
+
+  // -- run once per injection; NEVER allow a raw exception to sink the report --
+  function safeScan() {
+    try {
+      return runScan();
+    } catch (e) {
+      return {
+        isPaymentPage: false,
+        pageKind: 'none',
+        score: 0,
+        action: 'error',
+        factors: [],
+        notes: [],
+        domain: location.hostname,
+        url: location.href,
+        hasPay: false,
+        hostedBy: null,
+        nonPayment: false,
+        fatal: true,
+        error: String((e && e.message) || e),
+      };
+    }
+  }
+
+  let r = safeScan();
   globalThis.__tpPageScanResult = r;
+  let lastJson = JSON.stringify(r);
   try { showBanner(r); } catch {}
+
+  function publish(next) {
+    lastJson = JSON.stringify(next);
+    r = next;
+    globalThis.__tpPageScanResult = next;
+    try { showBanner(next); } catch {}
+    notifyBackground(next);
+  }
+
+  function startWatch() {
+    // re-injection while a watcher is live → just re-arm it (never 2 observers)
+    if (globalThis.__tpPageScanWatch) {
+      globalThis.__tpPageScanWatch.refresh();
+      try { globalThis.__tpPageScanWatch.armFrames(); } catch {}
+      try { showBanner(r); } catch {}
+      return;
+    }
+    let stopped = false;
+    let debounce = null;
+    let cap = null;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(debounce);
+      clearTimeout(cap);
+      try { mo.disconnect(); } catch {}
+      if (globalThis.__tpPageScanWatch) delete globalThis.__tpPageScanWatch;
+      window.removeEventListener('pagehide', stop);
+      try { document.getElementById('tp-watch-line')?.remove(); } catch {}
+    };
+    const schedule = (ms) => {
+      if (stopped) return;
+      clearTimeout(debounce);
+      debounce = setTimeout(rescan, ms);
+    };
+    const rescan = () => {
+      if (stopped) return;
+      const next = safeScan();
+      armFrames();
+      if (JSON.stringify(next) !== lastJson) publish(next);
+    };
+    // iframe documents load OUTSIDE the top-document observer — arm their
+    // load events so the rescan sees card fields once the frame is ready.
+    const armFrames = () => {
+      if (stopped) return;
+      try {
+        for (const f of document.querySelectorAll('iframe')) {
+          if (f.__tpWatchCtl === ctl) continue;
+          f.__tpWatchCtl = ctl;
+          try { f.addEventListener('load', () => schedule(150)); } catch { /* odd frame */ }
+        }
+      } catch { /* sabotaged DOM — watch still runs, frames just aren't armed */ }
+    };
+    const mo = new MutationObserver(() => schedule(WATCH_DEBOUNCE_MS));
+    try {
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch { return; }
+    cap = setTimeout(stop, WATCH_MS);
+    const ctl = {
+      stop,
+      armFrames,
+      refresh: () => { clearTimeout(cap); cap = setTimeout(stop, WATCH_MS); },
+    };
+    globalThis.__tpPageScanWatch = ctl;
+    window.addEventListener('pagehide', stop, { once: true });
+    armFrames();
+    try { showBanner(r); } catch {} // re-render so the "watching" line appears
+  }
+
+  startWatch();
 })();

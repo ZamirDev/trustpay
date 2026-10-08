@@ -75,8 +75,8 @@ function swatch(id) {
     cloud: '#c8d8ff',
     court: '#f5c86b',
     vapor: '#ff9f9f',
-    drop: '#3d2c2e',
-  }[id] || '#9fe6a0';
+    drop: '#2b2b33',
+  }[id] || '#03955b';
 }
 
 function wireCatalog(root) {
