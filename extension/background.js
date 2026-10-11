@@ -4,7 +4,7 @@
 //
 // API base: dev = localhost:4000. At submission, swap in the live Railway URL
 // (it stays paused until then to respect our free-tier budget):
-//   const API = 'https://devoted-caring-production-534f.up.railway.app';
+//   const API = 'http://localhost:4000';
 //
 // Every API-backed message first tries the server (900ms timeout). If it is
 // unreachable, the embedded riskModel.js scores/verifies in place so the
@@ -13,7 +13,7 @@
 
 import { scoreRisk, explain } from './riskModel.js';
 
-const API = 'http://localhost:4000';
+const API = 'https://trustpay-api-production-b717.up.railway.app';
 const LAST_KEY = 'tpLastVerdict';
 const API_TIMEOUT_MS = 900;
 const OFFLINE_TTL_MS = 5 * 60 * 1000;

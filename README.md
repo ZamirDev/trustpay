@@ -146,18 +146,20 @@ are identical in both modes.
   Scan first (*nothing to scan* + watching line), click **Subscribe with Easebuzz**, and the
   banner flips live to **0/allow · hosted by Easebuzz**.
 
-## Deploy (at submission)
+## Deploy (live)
 
-Backend stays on **Railway** (free tier), frontend on **Vercel** — both paused until
-submission to respect the free-tier budget.
+Backend on **Railway**, frontend on **Vercel**:
+
+- **Live backend:** https://trustpay-api-production-b717.up.railway.app
+- **Live frontend:** https://trustpay-zamirdevs-projects.vercel.app
 
 ```bash
 # server → Railway
-railway up            # previously: railway link devoted-caring-production-534f
+railway up            # from server/, pushes to the trustpay-api project
 
 # client → Vercel, pointing at the live API
 cd client
-$env:VITE_API_URL = "https://devoted-caring-production-534f.up.railway.app"
+$env:VITE_API_URL = "https://trustpay-api-production-b717.up.railway.app"
 vercel --prod
 
 # extension → swap the API base in extension/background.js to the live Railway URL,
